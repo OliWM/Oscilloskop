@@ -15,7 +15,7 @@ void uart0_Init(unsigned int ubrr) {
 
 void putchUSART0(char tx) { //skal laves til et interrupt tror jeg
     while (!(UCSR0A & (1 << UDRE0))); // Sidder fast i while-løkken så længe der IKKE er empty i dataregisteret (polling)
-    UDR0 = tx;  // flytter alle 8 bits ind i UDR0 TX registeret
+    UDR0 = tx;  // flytter alle 8 bits ind i UDR0 TX registeret - UART sender automatisk serielt afsted når noget rykkes ind i tx
 }
 
 void printString(const char* s) {   // pointer til char array
