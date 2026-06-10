@@ -1,6 +1,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "ADC.h"
+#include "adc.h"
+#include "timer.h"
 
 // Double buffers
 volatile uint8_t buffer_A[MAX_RECORD_LENGTH];
@@ -9,16 +10,7 @@ volatile uint8_t *active_buffer  = buffer_A;
 volatile uint8_t *ready_buffer   = buffer_B;
 volatile uint8_t  buffer_ready   = 0;
 volatile uint16_t buffer_index   = 0;
-volatile uint16_t record_length  = BUFFER_SIZE;
-
-// ---------------------------------------------------------------------------
-// Timer1 CTC ISR — trigger ADC konvertering
-// ---------------------------------------------------------------------------
-ISR(TIMER1_COMPA_vect)
-{
-    // Start ADC single conversion
-    ADCSRA |= (1 << ADSC);
-}
+volatile uint16_t record_length  = MAX_RECORD_LENGTH;
 
 // ---------------------------------------------------------------------------
 // ADC Complete ISR — læs sample, håndter buffer-skift
@@ -50,7 +42,6 @@ void adc_init(uint16_t sample_rate, uint16_t rec_length)
 {
     record_length = rec_length;
 
-    // --- ADC ---
     // REFS1:0 = 00 → ekstern AREF
     // ADLAR   = 1  → venstrejustering (læs 8-bit fra ADCH)
     // MUX     = 0  → ADC0 (juster pin efter behov)
@@ -62,18 +53,7 @@ void adc_init(uint16_t sample_rate, uint16_t rec_length)
     ADCSRA = (1 << ADEN) | (1 << ADIE)
            | (1 << ADPS2) | (1 << ADPS1) | (0 << ADPS0); // prescaler 64
 
-    // --- Timer1 CTC ---
-    // WGM12 = CTC mode (OCR1A som top)
-    // CS11 + CS10 = prescaler 64 → Timer clock = 16 MHz / 64 = 250 kHz
-    TCCR1A = 0;
-    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
-
-    // OCR1A bestemmer samplerate:
-    // OCR1A = (Timer_clock / sample_rate) - 1
-    OCR1A = (250000UL / sample_rate) - 1;
-
-    // Aktiver Timer1 Compare Match A interrupt
-    TIMSK1 = (1 << OCIE1A);
+    timer_init(sample_rate);
 
     sei();
 }
@@ -87,6 +67,6 @@ void adc_set_params(uint16_t sample_rate, uint16_t rec_length)
     record_length = rec_length;
     buffer_index  = 0;
     buffer_ready  = 0;
-    OCR1A = (250000UL / sample_rate) - 1;
+    timer_set_samplerate(sample_rate);
     sei();
 }
