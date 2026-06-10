@@ -24,7 +24,7 @@ void printString(const char* s) {   // pointer til char array
 
 ISR(USART0_RX_vect) {
     char c = UDR0;
-
+    PINB |= (1 << PB7); //blink LED ved modtaget data
     // Hvis vi allerede har data, der venter på main, så stopper den med at modtage
     if (ny_data_klar) return; 
 
@@ -36,7 +36,7 @@ ISR(USART0_RX_vect) {
         }
     } 
     else if (rx_pos < 15) { // håndtere buffer overrun
-        putchUSART0(c); // Echo tegnet tilbage til monitor, så vi kan se hvad vi skriver
+        // putchUSART0(c); // Echo tegnet tilbage til monitor, så vi kan se hvad vi skriver (udkommenteret til test af uart til labview)
         rx_buffer[rx_pos++] = c;    // gemmer i buffer
     }
 }
