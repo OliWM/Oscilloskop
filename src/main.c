@@ -107,8 +107,13 @@ SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
         else
             status = SPI_OTHER_ERROR;
 
+        char status_buffer[4];
+        sprintf(status_buffer, "S: %d", status);
+        sendStrXY(status_buffer, 0, 12); //print status på skærmen
+
         return status;
 }
+
 
 typedef enum
 {
