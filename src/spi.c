@@ -3,8 +3,9 @@
 void SPI_Init(SPI_Role role, uint8_t mode) {
     if (role == SPI_MASTER) {
         SPI_DDR |= (1 << SPI_MOSI_PIN) | (1 << SPI_SCK_PIN) | (1 << SPI_SS_PIN);    // Sætter MOSI, SCK og SS som outputs
-        SPI_PORT |= (1 << SPI_SS_PIN);  // Sikre at SS pin er høj fra start
-        SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR1); // Enable SPI, Master, set clock rate fosc/64
+        SPI_PORT |= (1 << SPI_SS_PIN);  // Sikre at SS pin er høj fra start (IDLE)
+        SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR1); // Enable SPI, Master
+        SPSR |= (1 << SPI2X);                          // SPI2X=1, SPR1=1, SPR0=0, set clock rate fosc/32 = 500 kHz
     } else {
         SPI_DDR |= (1 << SPI_MISO_PIN); // Slave Mode: MISO is output, others are input
         SPCR = (1 << SPE);  // Enable SPI, Slave

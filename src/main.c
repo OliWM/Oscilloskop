@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <util/delay.h>
+#include <spi.h>
 
 #define BAUD 115200
 #define UBRR_VAL ((F_CPU / 8 / BAUD) - 1) //"reverse" formlen for baudrate
@@ -85,6 +86,15 @@ void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uin
     putchUSART0(0x00);
     putchUSART0(0x00);       // CRC (ZERO16)
 }
+void SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
+{
+    SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
+    SPI_Transfer(0xAA);             // sync byte
+    SPI_Transfer(shape);
+    SPI_Transfer(ampl);
+    SPI_Transfer(freq);
+    SPI_PORT |= (1 << SPI_SS_PIN); // SS høj — FPGA latcher værdierne her
+}
 
 void main() {
     DDRB |= (1 << PB7); //LED output
@@ -150,9 +160,15 @@ void main() {
                     if (setting == 0)      shape     = sw;
                     else if (setting == 1) amplitude = sw;
                     else                   frequency = sw;
-                } else if (button == 3) {     // RESET (BTN3): nulstil alle parametre
+                    SigGen_Update(shape, amplitude, frequency); //SPI til FPGA
+                }
+                else if (button == 3)
+                { // RESET (BTN3): nulstil alle parametre
                     shape = amplitude = frequency = 0;
-                } else if (button == 2) {     // RUN (BTN2): toggle measuring-flag, ellers ingenting
+                    SigGen_Update(shape, amplitude, frequency); // SPI til FPGA
+                }
+                else if (button == 2)
+                { // RUN (BTN2): toggle measuring-flag, ellers ingenting
                     measuring = !measuring;
                 }
                 send_generator_packet(setting, shape, amplitude, frequency);
