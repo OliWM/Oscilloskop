@@ -86,15 +86,38 @@ void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uin
     putchUSART0(0x00);
     putchUSART0(0x00);       // CRC (ZERO16)
 }
-void SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
+SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
 {
     SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
-    SPI_Transfer(0xAA);             // sync byte
+    uint8_t hs = SPI_Transfer(0xAA);             // sync byte, læs handshake ind på hs
     SPI_Transfer(shape);
     SPI_Transfer(ampl);
     SPI_Transfer(freq);
     SPI_PORT |= (1 << SPI_SS_PIN); // SS høj — FPGA latcher værdierne her
+
+    SPI_handshake status;
+
+    if (hs == 0xAA)
+    {
+        status = SPI_OK;
+    }
+        else if (hs == 0b11101110){
+            status = SPI_SYNC_ERROR;
+        }
+        else
+            status = SPI_OTHER_ERROR;
+
+        return status;
 }
+
+typedef enum
+{
+    SPI_OK = 0,
+    SPI_SYNC_ERROR = 1,
+    SPI_OTHER_ERROR = 2,
+} SPI_handshake;
+
+
 
 void main() {
     DDRB |= (1 << PB7); //LED output
