@@ -13,7 +13,7 @@
 
 // Sæt til 1 for at vise ALLE rå modtagne bytes som hex (uanset pakkeformat).
 // Sæt til 0 for normal pakke-visning. Pakke-parseren kører i begge tilfælde.
-#define RAW_DEBUG 1
+#define RAW_DEBUG 0
 
 // ---- OLED layout ----
 #define LINE_W   16     // skærmen er 16 tegn bred
@@ -69,20 +69,21 @@ static void draw_window(uint8_t top)
     }
 }
 
-void send_generator_packet(void)
+// GENERATOR-svar (type 0x01). Data = active, shape, amplitude, frequency (4 bytes).
+// 55 AA | 00 0B(=11) | 01 | active shape amp freq | 00 00  (11 bytes total)
+void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uint8_t frequency)
 {
-    // 55 AA 00 0B 01 00 00 00 00 00 00  (11 bytes total)
     putchUSART0(0x55);
-    putchUSART0(0xAA); // sync
+    putchUSART0(0xAA);       // sync
     putchUSART0(0x00);
-    putchUSART0(0x0B); // length = 11
-    putchUSART0(0x01); // type: GENERATOR
+    putchUSART0(0x0B);       // length = 11
+    putchUSART0(0x01);       // type: GENERATOR
+    putchUSART0(active);
+    putchUSART0(shape);
+    putchUSART0(amplitude);
+    putchUSART0(frequency);
     putchUSART0(0x00);
-    putchUSART0(0x00); // active, shape
-    putchUSART0(0x00);
-    putchUSART0(0x00); // amplitude, frequency
-    putchUSART0(0x00);
-    putchUSART0(0x00); // CRC (ZERO16)
+    putchUSART0(0x00);       // CRC (ZERO16)
 }
 
 void main() {
@@ -93,10 +94,16 @@ void main() {
     InitializeDisplay();
 
     sei();
-    send_generator_packet();   // bed den anden enhed om at sende (kald evt. periodisk hvis nødvendigt)
+    send_generator_packet(0, 0, 0, 0);   // bed den anden enhed om at sende (start-tilstand)
 
-    uint8_t  scroll_top = 0;   // øverste synlige linje i vinduet
-    uint16_t tick = 0;         // tæller for den tidsstyrede auto-scroll
+    uint8_t  scroll_top = 0;   // øverste synlige linje (nederste linje = nyeste)
+
+    // Generator-tilstand. 'setting' (active indicator) vælger hvilket felt ENTER skriver til.
+    uint8_t  setting   = 0;    // 0=shape, 1=amplitude, 2=frequency
+    uint8_t  shape     = 0;
+    uint8_t  amplitude = 0;
+    uint8_t  frequency = 0;
+    uint8_t  measuring = 0;    // toggles ved hvert RUN-tryk (BTN2), starter slået fra
 
 #if RAW_DEBUG
     static const char hexd[] = "0123456789ABCDEF";
@@ -128,9 +135,28 @@ void main() {
 #else
         // --- Ny pakke modtaget? Læg databytes som hex-linje i loggen ---
         if (ny_pakke_klar) {
-            char line[LINE_W + 1];
+            char    line[LINE_W + 1];
+            uint8_t type   = pkt_type;
+            uint8_t button = pkt_data[0];   // ved BTN: byte 0 = knap (0-3)
+            uint8_t sw     = pkt_data[1];   // ved BTN: byte 1 = SW-værdi (0-255)
             format_hex_line(line, pkt_data, pkt_data_len);
             ny_pakke_klar = 0;     // frigiv ISR'en til at modtage næste pakke
+
+            // Knaptryk -> opdater generator-tilstand og send et GENERATOR-svar tilbage.
+            if (type == PKT_TYPE_BTN) {
+                if (button == 1) {            // SELECT (BTN1): skift indstilling 0->1->2->0
+                    setting = (setting + 1) % 3;
+                } else if (button == 0) {     // ENTER (BTN0): gem SW-værdien i valgt indstilling
+                    if (setting == 0)      shape     = sw;
+                    else if (setting == 1) amplitude = sw;
+                    else                   frequency = sw;
+                } else if (button == 3) {     // RESET (BTN3): nulstil alle parametre
+                    shape = amplitude = frequency = 0;
+                } else if (button == 2) {     // RUN (BTN2): toggle measuring-flag, ellers ingenting
+                    measuring = !measuring;
+                }
+                send_generator_packet(setting, shape, amplitude, frequency);
+            }
 
             log_add(line);
             // Hop til bunden så den nyeste pakke altid er synlig
@@ -139,7 +165,6 @@ void main() {
         }
 #endif
 
-        // --- Tidsstyret auto-scroll: ~1.5 s pr. skridt når der er mere end skærmen kan vise ---
         _delay_ms(50);           // poll hurtigt nok til at fange nye pakker
 
 #if RAW_DEBUG
@@ -155,13 +180,5 @@ void main() {
         }
 #endif
 
-        if (++tick >= 30) {      // 30 * 50ms = 1.5 s
-            tick = 0;
-            if (hist_count > SCREEN_H) {
-                scroll_top++;
-                if (scroll_top > hist_count - SCREEN_H) scroll_top = 0; // wrap til toppen
-                draw_window(scroll_top);
-            }
-        }
     }
 }
