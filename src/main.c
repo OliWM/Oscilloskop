@@ -1,6 +1,8 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "UART.h"
+#include "adc.h"
+#include "timer.h"
 #include "I2C.h"
 #include "ssd1306.h"
 #include <stdio.h>
@@ -130,6 +132,7 @@ void main() {
     InitializeDisplay();
 
     sei();
+    adc_init(1000, 100);  // default: 1000 SPS, 100 samples per pakke
     send_generator_packet(0, 0, 0, 0);   // bed den anden enhed om at sende (start-tilstand)
 
     uint8_t  scroll_top = 0;   // øverste synlige linje (nederste linje = nyeste)
@@ -216,6 +219,12 @@ void main() {
 
         _delay_ms(50);           // poll hurtigt nok til at fange nye pakker
 
+        // Send ADC-data når en buffer er klar og måling er aktiv
+        if (measuring && buffer_ready) {
+            uart_send_adc_packet(ready_buffer, record_length);
+            buffer_ready = 0;
+        }
+
 #if RAW_DEBUG
         // Flush en ufærdig linje hvis strømmen har været stille (~200ms),
         // så hver burst af bytes bliver vist selvom den ikke fylder en hel linje.
@@ -231,3 +240,6 @@ void main() {
 
     }
 }
+/*#include "adc.h" og #include "timer.h" tilføjet øverst
+adc_init(1000, 100) kaldt efter sei()
+ADC-afsendelse i bunden af loop — kun når både measuring og buffer_ready er sat*/
