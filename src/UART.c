@@ -109,3 +109,40 @@ ISR(USART0_RX_vect) {
         break;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Send ADC-buffer som binær pakke til LabVIEW
+// Pakkeformat: 0x55 0xAA | len_hi len_lo | type | data... | crc_hi crc_lo
+// length = total pakkelængde inkl. alle overhead-bytes (7 + databytes)
+// ---------------------------------------------------------------------------
+void uart_send_adc_packet(volatile uint8_t *data, uint16_t length)
+{
+    uint16_t total_length = length + 7; // 2 sync + 2 len + 1 type + 2 crc
+
+    // Sync bytes
+    putchUSART0(0x55);
+    putchUSART0(0xAA);
+
+    // Length (total pakkelængde)
+    putchUSART0((uint8_t)(total_length >> 8));
+    putchUSART0((uint8_t)(total_length & 0xFF));
+
+    // Type
+    putchUSART0(PKT_TYPE_ADC);
+
+    // Data
+    for (uint16_t i = 0; i < length; i++) {
+        putchUSART0(data[i]);
+    }
+
+    // CRC placeholder
+    putchUSART0(0x00);
+    putchUSART0(0x00);
+}
+
+/*Tilføjet selve uart_send_adc_packet() funktionen der bygger pakken op byte for byte:
+Sender sync bytes 0x55 0xAA
+Sender total længde (data + 7 overhead bytes) som to bytes
+Sender PKT_TYPE_ADC som type
+Looper igennem databufferen og sender alle samples
+Sender 0x00 0x00 som CRC placeholder*/
