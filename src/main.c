@@ -86,6 +86,13 @@ void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uin
     putchUSART0(0x00);
     putchUSART0(0x00);       // CRC (ZERO16)
 }
+typedef enum
+{
+    SPI_OK = 0,
+    SPI_SYNC_ERROR = 1,
+    SPI_OTHER_ERROR = 2,
+} SPI_handshake;
+
 SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
 {
     SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
@@ -107,26 +114,17 @@ SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
         else
             status = SPI_OTHER_ERROR;
 
-        char status_buffer[4];
-        sprintf(status_buffer, "S: %d", status);
-        sendStrXY(status_buffer, 0, 12); //print status på skærmen
-
         return status;
 }
 
 
-typedef enum
-{
-    SPI_OK = 0,
-    SPI_SYNC_ERROR = 1,
-    SPI_OTHER_ERROR = 2,
-} SPI_handshake;
 
 
 
 void main() {
     DDRB |= (1 << PB7); //LED output
     uart0_Init(UBRR_VAL);
+    SPI_Init(SPI_MASTER, 0);
     I2C_Init();
     clear_display();
     InitializeDisplay();
@@ -142,6 +140,7 @@ void main() {
     uint8_t  amplitude = 0;
     uint8_t  frequency = 0;
     uint8_t  measuring = 0;    // toggles ved hvert RUN-tryk (BTN2), starter slået fra
+    int8_t   last_spi_status = -1;  // -1 = ingen SPI-overførsel endnu
 
 #if RAW_DEBUG
     static const char hexd[] = "0123456789ABCDEF";
@@ -151,6 +150,7 @@ void main() {
 #endif
 
     while (1) {
+       send_generator_packet(setting, shape, amplitude, frequency);
 #if RAW_DEBUG
         // --- RÅ DEBUG: dump hver modtaget byte som hex, uanset format ---
         int16_t b;
@@ -188,12 +188,12 @@ void main() {
                     if (setting == 0)      shape     = sw;
                     else if (setting == 1) amplitude = sw;
                     else                   frequency = sw;
-                    SigGen_Update(shape, amplitude, frequency); //SPI til FPGA
+                    last_spi_status = (int8_t)SigGen_Update(shape, amplitude, frequency);
                 }
                 else if (button == 3)
                 { // RESET (BTN3): nulstil alle parametre
                     shape = amplitude = frequency = 0;
-                    SigGen_Update(shape, amplitude, frequency); // SPI til FPGA
+                    last_spi_status = (int8_t)SigGen_Update(shape, amplitude, frequency);
                 }
                 else if (button == 2)
                 { // RUN (BTN2): toggle measuring-flag, ellers ingenting
@@ -206,6 +206,11 @@ void main() {
             // Hop til bunden så den nyeste pakke altid er synlig
             scroll_top = (hist_count > SCREEN_H) ? (hist_count - SCREEN_H) : 0;
             draw_window(scroll_top);
+            if (last_spi_status >= 0) {
+                char sb[8];
+                sprintf(sb, "S:%d", (int)last_spi_status);
+                sendStrXY(sb, 0, 12);
+            }
         }
 #endif
 
