@@ -11,6 +11,24 @@ volatile uint8_t *ready_buffer   = buffer_B;
 volatile uint8_t  buffer_ready   = 0;
 volatile uint16_t buffer_index   = 0;
 volatile uint16_t record_length  = MAX_RECORD_LENGTH;
+volatile uint16_t current_sample_rate = 0;
+
+// Klem værdier modtaget fra UART ind i sikre grænser, FØR de bruges.
+// record_length styrer hvornår ADC_vect skifter buffer — en uklemt værdi
+// over MAX_RECORD_LENGTH får ISR'en til at skrive uden for buffer_A/buffer_B.
+static uint16_t clamp_sample_rate(uint16_t sr)
+{
+    if (sr < 10) return 10;
+    if (sr > 10000) return 10000;
+    return sr;
+}
+
+static uint16_t clamp_record_length(uint16_t rl)
+{
+    if (rl < 10) return 10;
+    if (rl > MAX_RECORD_LENGTH) return MAX_RECORD_LENGTH;
+    return rl;
+}
 
 // ---------------------------------------------------------------------------
 // ADC Complete ISR — læs sample, håndter buffer-skift
@@ -40,6 +58,10 @@ ISR(ADC_vect)
 // ---------------------------------------------------------------------------
 void adc_init(uint16_t sample_rate, uint16_t rec_length)
 {
+    sample_rate = clamp_sample_rate(sample_rate);
+    rec_length  = clamp_record_length(rec_length);
+
+    current_sample_rate = sample_rate;
     record_length = rec_length;
 
     // REFS1:0 = 00 → ekstern AREF
@@ -63,7 +85,11 @@ void adc_init(uint16_t sample_rate, uint16_t rec_length)
 // ---------------------------------------------------------------------------
 void adc_set_params(uint16_t sample_rate, uint16_t rec_length)
 {
+    sample_rate = clamp_sample_rate(sample_rate);
+    rec_length  = clamp_record_length(rec_length);
+
     cli();
+    current_sample_rate = sample_rate;
     record_length = rec_length;
     buffer_index  = 0;
     buffer_ready  = 0;

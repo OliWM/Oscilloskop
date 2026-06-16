@@ -23,6 +23,16 @@
 #define SCREEN_H 8      // skærmen er 8 linjer høj (0-7)
 #define HIST     32     // hvor mange linjer historik vi gemmer (rul-log)
 
+// De øverste LOG_ROWS linjer er rul-log, de sidste 3 er status (S:/SR:/RL:).
+#define LOG_ROWS      5
+#define ROW_STATUS_S  5
+#define ROW_STATUS_SR 6
+#define ROW_STATUS_RL 7
+
+// OLED-skrivning over I2C er langsom — opdater skærmen kun hvert N'te
+// gennemløb af hovedløkken (når der faktisk er noget nyt at vise).
+#define DISPLAY_UPDATE_INTERVAL 20
+
 // Rul-log: én linje pr. modtaget pakke. Når den er fuld, skubber vi op (FIFO).
 static char    history[HIST][LINE_W + 1];
 static uint8_t hist_count = 0;   // antal gyldige linjer (0..HIST)
@@ -56,20 +66,39 @@ static void format_hex_line(char *out, const volatile uint8_t *data, uint8_t len
     out[p] = '\0';
 }
 
-// Tegn et vindue på 8 linjer fra historikken, startende ved 'top'.
-// Hver linje paddes med mellemrum til fuld bredde, så gamle tegn overskrives.
-static void draw_window(uint8_t top)
+// Skriv 'text' på 'row', paddet med mellemrum til fuld bredde så gamle tegn overskrives.
+static void print_padded(uint8_t row, const char *text)
 {
     char padded[LINE_W + 1];
-    for (uint8_t row = 0; row < SCREEN_H; row++) {
+    uint8_t i = 0;
+    while (text[i] && i < LINE_W) { padded[i] = text[i]; i++; }
+    while (i < LINE_W) padded[i++] = ' ';
+    padded[LINE_W] = '\0';
+    sendStrXY(padded, row, 0);   // X = række, Y = kolonne (0)
+}
+
+// Tegn et vindue på LOG_ROWS linjer fra historikken, startende ved 'top'.
+static void draw_window(uint8_t top)
+{
+    for (uint8_t row = 0; row < LOG_ROWS; row++) {
         uint8_t idx = top + row;
-        uint8_t i = 0;
-        if (idx < hist_count)
-            while (history[idx][i] && i < LINE_W) { padded[i] = history[idx][i]; i++; }
-        while (i < LINE_W) padded[i++] = ' ';
-        padded[LINE_W] = '\0';
-        sendStrXY(padded, row, 0);   // X = række (0-7), Y = kolonne (0)
+        print_padded(row, (idx < hist_count) ? history[idx] : "");
     }
+}
+
+// Statuslinjer i bunden af skærmen: sidste SPI-status, samplerate, record length.
+static void update_status_lines(int8_t spi_status)
+{
+    char line[LINE_W + 1];
+
+    if (spi_status >= 0) {
+        sprintf(line, "S:%d", (int)spi_status);
+        print_padded(ROW_STATUS_S, line);
+    }
+    sprintf(line, "SR:%u", current_sample_rate);
+    print_padded(ROW_STATUS_SR, line);
+    sprintf(line, "RL:%u", record_length);
+    print_padded(ROW_STATUS_RL, line);
 }
 
 // GENERATOR-svar (type 0x01). Data = active, shape, amplitude, frequency (4 bytes).
@@ -214,6 +243,8 @@ void main() {
     uint8_t  frequency = 0;
     uint8_t  measuring = 1;    // toggles ved hvert RUN-tryk (BTN2), starter slået fra
     int8_t   last_spi_status = -1;  // -1 = ingen SPI-overførsel endnu
+    uint8_t  display_dirty = 1;     // tegn skærmen mindst én gang ved opstart
+    uint8_t  loop_counter  = 0;     // tæller løkkegennemløb mellem skærm-opdateringer
 
 #if RAW_DEBUG
     static const char hexd[] = "0123456789ABCDEF";
@@ -281,27 +312,33 @@ void main() {
                 send_generator_packet(setting, shape, amplitude, frequency);
             }
             else if (type == PKT_TYPE_SEND){
-                // tag pkt_data[0] og [1] sammen = sample rate, [2] og [3] = record length.
-                uint16_t sample_rate = (pkt_data[1] << 8) | pkt_data[2]; // forsøg på at kombinere til 16 bit, lad os se om det virker.
-                uint16_t rec_length = (pkt_data[3] << 8) | pkt_data[4];
-                adc_set_params(sample_rate, rec_length);
+                // Data: [0..1] = sample rate (big-endian), [2..3] = record length (big-endian)
+                uint16_t sample_rate = ((uint16_t)pkt_data[0] << 8) | pkt_data[1];
+                uint16_t rec_length  = ((uint16_t)pkt_data[2] << 8) | pkt_data[3];
+                adc_set_params(sample_rate, rec_length); // klemmer værdierne til sikre grænser internt
             }
 
-                log_add(line);
+            log_add(line);
             // Hop til bunden så den nyeste pakke altid er synlig
-            scroll_top = (hist_count > SCREEN_H) ? (hist_count - SCREEN_H) : 0;
-            draw_window(scroll_top);
-            if (last_spi_status >= 0) {
-                char sb[8];
-                sprintf(sb, "S:%d", (int)last_spi_status);
-                sendStrXY(sb, 0, 12);
-            }
+            scroll_top = (hist_count > LOG_ROWS) ? (hist_count - LOG_ROWS) : 0;
+            display_dirty = 1;   // skærmen tegnes først når DISPLAY_UPDATE_INTERVAL er nået
         }
 #endif
         // Send ADC-data når en buffer er klar og måling er aktiv
         if (measuring && buffer_ready) {
             uart_send_adc_packet(ready_buffer, record_length);
             buffer_ready = 0;
+        }
+
+        // OLED over I2C er langsom — tegn den kun hvert DISPLAY_UPDATE_INTERVAL'te
+        // gennemløb, og kun hvis der faktisk er noget nyt (display_dirty).
+        if (++loop_counter >= DISPLAY_UPDATE_INTERVAL) {
+            loop_counter = 0;
+            if (display_dirty) {
+                display_dirty = 0;
+                draw_window(scroll_top);
+                update_status_lines(last_spi_status);
+            }
         }
 
 #if RAW_DEBUG
