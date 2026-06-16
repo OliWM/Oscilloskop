@@ -1,6 +1,6 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "adc.h"
+#include "ADC.h"
 #include "timer.h"
 
 // Double buffers

@@ -10,7 +10,7 @@
 #define PKT_TYPE_BTN   0x01
 #define PKT_TYPE_SEND  0x02
 #define PKT_TYPE_START 0x03
-#define PKT_TYPE_ADC   0x04   // ADC måledata fra MCU til LabVIEW
+#define PKT_TYPE_ADC   0x02   // ADC måledata fra MCU til LabVIEW
 
 // Sættes af RX-ISR'en, læses af main. Læs dem mens ny_pakke_klar==1; ISR'en
 // rører dem ikke før main har ryddet flaget igen.
@@ -18,6 +18,7 @@ extern volatile uint8_t pkt_type;
 extern volatile uint8_t pkt_data[PKT_MAX_DATA];
 extern volatile uint8_t pkt_data_len;
 extern volatile uint8_t ny_pakke_klar;
+extern volatile uint8_t UART_flag;
 
 void uart0_Init(unsigned int ubrr);
 void putchUSART0(char tx);

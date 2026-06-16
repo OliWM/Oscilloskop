@@ -1,7 +1,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "UART.h"
-#include "adc.h"
+#include "ADC.h"
 #include "timer.h"
 #include "I2C.h"
 #include "ssd1306.h"
@@ -106,7 +106,7 @@ SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
 
     SPI_handshake status;
 
-    if (hs == 0xAA)
+    if (hs == 0x55)
     {
         status = SPI_OK;
     }
@@ -118,10 +118,80 @@ SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
 
         return status;
 }
+enum
+{
+    S_SYNC1,
+    S_SYNC2,
+    S_LEN_HI,
+    S_LEN_LO,
+    S_TYPE,
+    S_DATA,
+    S_CRC_HI,
+    S_CRC_LO
+};
+
+void UART_data_rx(uint8_t c)
+{
+    static uint8_t state = S_SYNC1;
+    static uint16_t length = 0;    // rå længdefelt fra pakken
+    static uint16_t remaining = 0; // databytes der mangler at blive læst
+    static uint8_t idx = 0;        // skrive-index i pkt_data
 
 
+    switch (state)
+    {
+    case S_SYNC1:
+        if (c == 0x55)
+            state = S_SYNC2;
+        break;
 
+    case S_SYNC2:
+        if (c == 0xAA)
+            state = S_LEN_HI; // sync komplet
+        else if (c == 0x55)
+            state = S_SYNC2; // bliv og vent på 0xAA
+        else
+            state = S_SYNC1; // falsk start, søg igen
+        break;
 
+    case S_LEN_HI:
+        length = ((uint16_t)c) << 8;
+        state = S_LEN_LO;
+        break;
+
+    case S_LEN_LO:
+        length |= c;
+        state = S_TYPE;
+        break;
+
+    case S_TYPE:
+        pkt_type = c;
+        // Antager length = HELE pakkens længde:
+        //   2 sync + 2 len + 1 type + 2 crc = 7 overhead-bytes -> data = length - 7.
+        remaining = (length >= 7) ? (length - 7) : 0;
+        if (remaining > PKT_MAX_DATA)
+            remaining = PKT_MAX_DATA; // klem fast så vi ikke render over bufferen
+        pkt_data_len = (uint8_t)remaining;
+        idx = 0;
+        state = (remaining > 0) ? S_DATA : S_CRC_HI;
+        break;
+
+    case S_DATA:
+        pkt_data[idx++] = c;
+        if (--remaining == 0)
+            state = S_CRC_HI;
+        break;
+
+    case S_CRC_HI:
+        state = S_CRC_LO; // CRC ignoreres lige nu
+        break;
+
+    case S_CRC_LO:
+        ny_pakke_klar = 1; // hel pakke klar til main
+        state = S_SYNC1;   // klar til næste pakke
+        break;
+    }
+}
 
 void main() {
     DDRB |= (1 << PB7); //LED output
@@ -142,7 +212,7 @@ void main() {
     uint8_t  shape     = 0;
     uint8_t  amplitude = 0;
     uint8_t  frequency = 0;
-    uint8_t  measuring = 0;    // toggles ved hvert RUN-tryk (BTN2), starter slået fra
+    uint8_t  measuring = 1;    // toggles ved hvert RUN-tryk (BTN2), starter slået fra
     int8_t   last_spi_status = -1;  // -1 = ingen SPI-overførsel endnu
 
 #if RAW_DEBUG
@@ -153,7 +223,13 @@ void main() {
 #endif
 
     while (1) {
-       send_generator_packet(setting, shape, amplitude, frequency);
+        int16_t b; //16 fordi værdien både kan være -1 (så ikke uint) og op til 255 (så over 127 vi ku få fra int8_t)
+
+        while((b = uart_raw_get()) >= 0){ //sætter b= uart_raw_get() og tjekker om der er noget
+            UART_data_rx((uint8_t)b);
+        }
+
+        // send_generator_packet(setting, shape, amplitude, frequency); //stop timeout
 #if RAW_DEBUG
         // --- RÅ DEBUG: dump hver modtaget byte som hex, uanset format ---
         int16_t b;
@@ -217,7 +293,7 @@ void main() {
         }
 #endif
 
-        _delay_ms(50);           // poll hurtigt nok til at fange nye pakker
+        _delay_ms(50);           // poll hurtigt nok til at fange nye pakker - går ikk at have delay i main ift. ISR
 
         // Send ADC-data når en buffer er klar og måling er aktiv
         if (measuring && buffer_ready) {
