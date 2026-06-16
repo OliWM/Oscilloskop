@@ -3,6 +3,10 @@
 #include "ADC.h"
 #include "timer.h"
 
+#define BAUD 115200
+
+uint16_t safe_baud = BAUD * 0.9;
+
 // Double buffers
 volatile uint8_t buffer_A[MAX_RECORD_LENGTH];
 volatile uint8_t buffer_B[MAX_RECORD_LENGTH];
@@ -23,10 +27,29 @@ static uint16_t clamp_sample_rate(uint16_t sr)
     return sr;
 }
 
-static uint16_t clamp_record_length(uint16_t rl)
+static uint16_t clamp_record_length(uint16_t rl, uint16_t sr)
 {
-    if (rl < 10) return 10;
+    uint32_t byte_rate = (uint32_t)safe_baud / 10;
+    if (sr >= byte_rate) // lidt unødvendigt. Men HVIS vi skulle ændre til en lavere BAUD end 115200 eller højere sr end 10.000 så kunne vi få en bug uden.
+    {
+        return 0; //så ved vi da der er sket en fejl. 
+    }
+
+    uint32_t datapak = (uint32_t)7 * sr; //parentesen fordi sr kun er uint16, så vi skal bruge at 7 er uint32 for ikk at risikere at den wrapper
+
+    if (rl <= (datapak / (byte_rate - sr)))
+    {
+        if ((datapak % (byte_rate - sr)) == 0){
+            rl = (datapak / (byte_rate - sr)); 
+        }
+        else 
+        {
+            rl = (datapak / (byte_rate - sr)) + 1;
+        }
+    }
+
     if (rl > MAX_RECORD_LENGTH) return MAX_RECORD_LENGTH;
+
     return rl;
 }
 
@@ -59,7 +82,7 @@ ISR(ADC_vect)
 void adc_init(uint16_t sample_rate, uint16_t rec_length)
 {
     sample_rate = clamp_sample_rate(sample_rate);
-    rec_length  = clamp_record_length(rec_length);
+    rec_length  = clamp_record_length(rec_length, sample_rate);
 
     current_sample_rate = sample_rate;
     record_length = rec_length;
@@ -86,7 +109,7 @@ void adc_init(uint16_t sample_rate, uint16_t rec_length)
 void adc_set_params(uint16_t sample_rate, uint16_t rec_length)
 {
     sample_rate = clamp_sample_rate(sample_rate);
-    rec_length  = clamp_record_length(rec_length);
+    rec_length  = clamp_record_length(rec_length, sample_rate);
 
     cli();
     current_sample_rate = sample_rate;

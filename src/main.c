@@ -315,6 +315,7 @@ void main() {
                 // Data: [0..1] = sample rate (big-endian), [2..3] = record length (big-endian)
                 uint16_t sample_rate = ((uint16_t)pkt_data[0] << 8) | pkt_data[1];
                 uint16_t rec_length  = ((uint16_t)pkt_data[2] << 8) | pkt_data[3];
+                
                 adc_set_params(sample_rate, rec_length); // klemmer værdierne til sikre grænser internt
             }
 
