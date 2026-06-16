@@ -5,7 +5,7 @@
 
 #define BAUD 115200
 
-uint16_t safe_baud = (BAUD * 10)/9;
+uint16_t safe_baud = (BAUD * 9)/10;
 
 // Double buffers
 volatile uint8_t buffer_A[MAX_RECORD_LENGTH];
