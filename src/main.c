@@ -251,16 +251,16 @@ void main() {
         }
 #else
         // --- Ny pakke modtaget? Læg databytes som hex-linje i loggen ---
-        if (ny_pakke_klar) {
+        if (ny_pakke_klar) { //lav som funktion og fjern fra main?
             char    line[LINE_W + 1];
             uint8_t type   = pkt_type;
-            uint8_t button = pkt_data[0];   // ved BTN: byte 0 = knap (0-3)
-            uint8_t sw     = pkt_data[1];   // ved BTN: byte 1 = SW-værdi (0-255)
             format_hex_line(line, pkt_data, pkt_data_len);
             ny_pakke_klar = 0;     // frigiv ISR'en til at modtage næste pakke
 
             // Knaptryk -> opdater generator-tilstand og send et GENERATOR-svar tilbage.
             if (type == PKT_TYPE_BTN) {
+                uint8_t button = pkt_data[0]; // ved BTN: byte 0 = knap (0-3)
+                uint8_t sw = pkt_data[1];     // ved BTN: byte 1 = SW-værdi (0-255)
                 if (button == 1) {            // SELECT (BTN1): skift indstilling 0->1->2->0
                     setting = (setting + 1) % 3;
                 } else if (button == 0) {     // ENTER (BTN0): gem SW-værdien i valgt indstilling
@@ -280,8 +280,14 @@ void main() {
                 }
                 send_generator_packet(setting, shape, amplitude, frequency);
             }
+            else if (type == PKT_TYPE_SEND){
+                // tag pkt_data[0] og [1] sammen = sample rate, [2] og [3] = record length.
+                uint16_t sample_rate = (pkt_data[1] << 8) | pkt_data[2]; // forsøg på at kombinere til 16 bit, lad os se om det virker.
+                uint16_t rec_length = (pkt_data[3] << 8) | pkt_data[4];
+                adc_set_params(sample_rate, rec_length);
+            }
 
-            log_add(line);
+                log_add(line);
             // Hop til bunden så den nyeste pakke altid er synlig
             scroll_top = (hist_count > SCREEN_H) ? (hist_count - SCREEN_H) : 0;
             draw_window(scroll_top);
@@ -292,9 +298,6 @@ void main() {
             }
         }
 #endif
-
-        _delay_ms(50);           // poll hurtigt nok til at fange nye pakker - går ikk at have delay i main ift. ISR
-
         // Send ADC-data når en buffer er klar og måling er aktiv
         if (measuring && buffer_ready) {
             uart_send_adc_packet(ready_buffer, record_length);
