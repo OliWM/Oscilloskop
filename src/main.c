@@ -87,12 +87,12 @@ static void draw_window(uint8_t top)
 }
 
 // Statuslinjer i bunden af skærmen: sidste SPI-status, samplerate, record length.
-static void update_status_lines(int8_t spi_status)
+static void update_status_lines(int16_t spi_status)
 {
     char line[LINE_W + 1];
 
     if (spi_status >= 0) {
-        sprintf(line, "S:%d", (int)spi_status);
+        sprintf(line, "S:0x%02X", (uint8_t)spi_status);
         print_padded(ROW_STATUS_S, line);
     }
     sprintf(line, "SR:%u", current_sample_rate);
@@ -117,14 +117,7 @@ void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uin
     putchUSART0(0x00);
     putchUSART0(0x00);       // CRC (ZERO16)
 }
-typedef enum
-{
-    SPI_OK = 0,
-    SPI_SYNC_ERROR = 1,
-    SPI_OTHER_ERROR = 2,
-} SPI_handshake;
-
-SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
+uint8_t SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
 {
     SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
     uint8_t hs = SPI_Transfer(0xAA);             // sync byte, læs handshake ind på hs
@@ -133,19 +126,7 @@ SPI_handshake SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
     SPI_Transfer(freq);
     SPI_PORT |= (1 << SPI_SS_PIN); // SS høj — FPGA latcher værdierne her
 
-    SPI_handshake status;
-
-    if (hs == 0x55)
-    {
-        status = SPI_OK;
-    }
-        else if (hs == 0b11101110){
-            status = SPI_SYNC_ERROR;
-        }
-        else
-            status = SPI_OTHER_ERROR;
-
-        return status;
+    return hs;
 }
 enum
 {
@@ -242,7 +223,7 @@ void main() {
     uint8_t  amplitude = 0;
     uint8_t  frequency = 0;
     uint8_t  measuring = 1;    // toggles ved hvert RUN-tryk (BTN2), starter slået fra
-    int8_t   last_spi_status = -1;  // -1 = ingen SPI-overførsel endnu
+    int16_t  last_spi_status = -1;  // -1 = ingen SPI-overførsel endnu
     uint8_t  display_dirty = 1;     // tegn skærmen mindst én gang ved opstart
     uint8_t  loop_counter  = 0;     // tæller løkkegennemløb mellem skærm-opdateringer
 
@@ -298,12 +279,12 @@ void main() {
                     if (setting == 0)      shape     = sw;
                     else if (setting == 1) amplitude = sw;
                     else                   frequency = sw;
-                    last_spi_status = (int8_t)SigGen_Update(shape, amplitude, frequency);
+                    last_spi_status = (int16_t)SigGen_Update(shape, amplitude, frequency);
                 }
                 else if (button == 3)
                 { // RESET (BTN3): nulstil alle parametre
                     shape = amplitude = frequency = 0;
-                    last_spi_status = (int8_t)SigGen_Update(shape, amplitude, frequency);
+                    last_spi_status = (int16_t)SigGen_Update(shape, amplitude, frequency);
                 }
                 else if (button == 2)
                 { // RUN (BTN2): toggle measuring-flag, ellers ingenting
