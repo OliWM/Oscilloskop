@@ -333,7 +333,7 @@ void main() {
                     uint8_t max_ampl = 0;
                     uint8_t min_ampl = 255;
 
-                    for (uint16_t j = 0; j < 500; j++) //tag 500 målinger
+                    for (uint16_t j = 0; j < 5000; j++) //tag 500 målinger
                     {
                         ADCSRA |= (1 << ADSC); //Start konvertering
                         while (ADCSRA & (1<<ADSC)); // vent til sample færdigt
