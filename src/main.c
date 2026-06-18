@@ -17,7 +17,7 @@
 // Sæt til 1 for at vise ALLE rå modtagne bytes som hex (uanset pakkeformat).
 // Sæt til 0 for normal pakke-visning. Pakke-parseren kører i begge tilfælde.
 #define RAW_DEBUG 0
-#define SPI_test_mode 0
+#define SPI_test_mode 1
 
 // ---- OLED layout ----
 #define LINE_W   16     // skærmen er 16 tegn bred
@@ -316,10 +316,16 @@ void main() {
                         last_spi_status = (int16_t)SigGen_Update(shape, amplitude, frequency);
                         if (last_spi_status == 0x55) hs_count++ ;
                     }
-                    char spi_result[18];
-                    sprintf(spi_result, "SPI: %5d /10000", hs_count);
+                    char spi_result1[6];
+                    char spi_result2[6];
+                    char spi_result3[8];
+                    sprintf(spi_result1, "SPI: ");
+                    sprintf(spi_result2, "%5d", hs_count);
+                    sprintf(spi_result3, " /10000");
                     clear_display();
-                    sendStrXY(spi_result, 0, 4);
+                    sendStrXY(spi_result1, 3, 4);
+                    sendStrXY(spi_result2, 4, 4);
+                    sendStrXY(spi_result3, 5, 2);
                 }
             }
             else if (type == PKT_TYPE_SEND){ //oscilloscop instruks
