@@ -17,6 +17,7 @@
 // Sæt til 1 for at vise ALLE rå modtagne bytes som hex (uanset pakkeformat).
 // Sæt til 0 for normal pakke-visning. Pakke-parseren kører i begge tilfælde.
 #define RAW_DEBUG 0
+#define SPI_test_mode 0
 
 // ---- OLED layout ----
 #define LINE_W   16     // skærmen er 16 tegn bred
@@ -286,6 +287,7 @@ void main() {
 
             // Knaptryk -> opdater generator-tilstand og send et GENERATOR-svar tilbage.
             if (type == PKT_TYPE_BTN) {
+                if (!SPI_test_mode){
                 uint8_t button = pkt_data[0]; // ved BTN: byte 0 = knap (0-3)
                 uint8_t sw = pkt_data[1];     // ved BTN: byte 1 = SW-værdi (0-255)
                 if (button == 1) {            // SELECT (BTN1): skift indstilling 0->1->2->0
@@ -306,6 +308,19 @@ void main() {
                     measuring = !measuring;
                 }
                 send_generator_packet(setting, shape, amplitude, frequency);
+                }
+                if (SPI_test_mode){
+                    uint16_t hs_count = 0;
+                    for (uint16_t i = 0; i < 10000; i++)
+                    {
+                        last_spi_status = (int16_t)SigGen_Update(shape, amplitude, frequency);
+                        if (last_spi_status == 0x55) hs_count++ ;
+                    }
+                    char spi_result[18];
+                    sprintf(spi_result, "SPI: %5d /10000", hs_count);
+                    clear_display();
+                    sendStrXY(spi_result, 0, 4);
+                }
             }
             else if (type == PKT_TYPE_SEND){ //oscilloscop instruks
                 // Data: [0..1] = sample rate (big-endian), [2..3] = record length (big-endian)
