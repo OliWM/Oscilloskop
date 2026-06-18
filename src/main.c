@@ -117,6 +117,21 @@ void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uin
     putchUSART0(0x00);
     putchUSART0(0x00);       // CRC (ZERO16)
 }
+
+void send_bode_packet(uint8_t *measurement)
+{
+    putchUSART0(0x55);
+    putchUSART0(0xAA); // sync
+    putchUSART0(0x01);
+    putchUSART0(0x06); // length = 262
+    putchUSART0(0x03); // type: BODE
+    for (uint8_t i = 0; i < 255; i++){
+        putchUSART0(measurement[i]);
+    }
+    putchUSART0(0x00);
+    putchUSART0(0x00); // CRC (ZERO16)
+}
+
 uint8_t SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
 {
     SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
@@ -309,15 +324,16 @@ void main() {
                 uint8_t bode_measurement[255];
 
                 TIMSK1 &= ~(1 << OCIE1A); // Sluk timer adc samplingen
-                uint8_t max_ampl = 0;
-                uint8_t min_ampl = 255;
 
                 for (uint8_t i = 1; ; i++) //wrapper i ved 255??
                 {
                     SigGen_Update(shape, amplitude, i);
                     _delay_ms(50);
 
-                    for (uint8_t j = 0; j < 500; j++) //tag 500 målinger
+                    uint8_t max_ampl = 0;
+                    uint8_t min_ampl = 255;
+
+                    for (uint16_t j = 0; j < 500; j++) //tag 500 målinger
                     {
                         ADCSRA |= (1 << ADSC); //Start konvertering
                         while (ADCSRA & (1<<ADSC)); // vent til sample færdigt
@@ -344,7 +360,7 @@ void main() {
                     }
                     TIMSK1 |= (1 << OCIE1A); //tænd timeren igen
 
-
+                    send_bode_packet(bode_measurement);
             }
 
             log_add(line);
