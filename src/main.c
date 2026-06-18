@@ -394,7 +394,7 @@ void main() {
         // gennemløb, og kun hvis der faktisk er noget nyt (display_dirty).
         if (++loop_counter >= DISPLAY_UPDATE_INTERVAL) {
             loop_counter = 0;
-            if (display_dirty) {
+            if (display_dirty && !SPI_test_mode) {
                 display_dirty = 0;
                 draw_window(scroll_top);
                 update_status_lines(last_spi_status);
