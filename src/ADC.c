@@ -92,11 +92,13 @@ void adc_init(uint16_t sample_rate, uint16_t rec_length)
     // MUX     = 0  → ADC0 (juster pin efter behov)
     ADMUX = (0 << REFS1) | (0 << REFS0) | (1 << ADLAR) | (0 << MUX0);
 
-    // Prescaler 64 → ADC clock = 16 MHz / 64 = 250 kHz (~19.200 SPS max)
+    // Prescaler 16 → ADC clock = 16 MHz / 16 = 1 MHz (~76.900 SPS max)
+    // Over 200 kHz mister ADC'en 10-bit nøjagtighed, men vi bruger kun
+    // de øverste 8 bit (ADLAR=1 → ADCH), så det er acceptabelt.
     // ADEN  = ADC enable
     // ADIE  = ADC interrupt enable
     ADCSRA = (1 << ADEN) | (1 << ADIE)
-           | (1 << ADPS2) | (1 << ADPS1) | (0 << ADPS0); // prescaler 64
+           | (1 << ADPS2) | (0 << ADPS1) | (0 << ADPS0); // prescaler 16
 
     timer_init(sample_rate);
 
