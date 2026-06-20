@@ -3,8 +3,6 @@
 #include "ADC.h"
 #include "timer.h"
 
-#define BAUD 115200
-
 // Double buffers
 volatile uint8_t buffer_A[MAX_RECORD_LENGTH];
 volatile uint8_t buffer_B[MAX_RECORD_LENGTH];
@@ -27,7 +25,7 @@ static uint16_t clamp_sample_rate(uint16_t sr)
 
 static uint16_t clamp_record_length(uint16_t rl, uint16_t sr)
 {
-    uint32_t byte_rate = (uint32_t)BAUD / 10;
+    uint32_t byte_rate = (uint32_t)115200 / 10;
     if (sr >= byte_rate) // lidt unødvendigt. Men HVIS vi skulle ændre til en lavere BAUD end 115200 eller højere sr end 10.000 så kunne vi få en bug uden.
     {
         return 0; //så ved vi da der er sket en fejl. 

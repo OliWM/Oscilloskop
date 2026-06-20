@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <util/delay.h>
-#include <spi.h>
+#include "spi.h"
 #include "bode.h"
 
 #define BAUD 115200
@@ -67,7 +67,7 @@ static void handle_spi_test(void)
     sendStrXY(spi_result3, 5, 2);
 }
 
-void main() {
+int main(void) {
     DDRB |= (1 << PB7); //LED output
     uart0_Init(UBRR_VAL);
     SPI_Init(SPI_MASTER, 0);
