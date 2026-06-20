@@ -1,0 +1,50 @@
+#include "bode.h"
+#include "spi.h"
+#include "UART.h"
+#include <avr/io.h>
+#include <util/delay.h>
+
+void run_bode_sweep(uint8_t initial_freq)
+{
+    SigGen_Update(3, 255, initial_freq);
+    _delay_ms(50);
+
+    uint8_t bode_measurement[255];
+
+    TIMSK1 &= ~(1 << OCIE1A); // Sluk timer adc samplingen
+
+    for (uint8_t i = 1; ; i++)
+    {
+        SigGen_Update(3, 255, i);
+        _delay_ms(50);
+
+        uint8_t max_ampl = 0;
+        uint8_t min_ampl = 255;
+
+        for (uint16_t j = 0; j < 500; j++)
+        {
+            ADCSRA |= (1 << ADSC);
+            while (ADCSRA & (1 << ADSC));
+
+            uint8_t sample = ADCH;
+            if (sample > max_ampl)
+                max_ampl = sample;
+            if (sample < min_ampl)
+                min_ampl = sample;
+        }
+        bode_measurement[i - 1] = max_ampl - min_ampl;
+
+        if (i == 255)
+            break;
+    }
+
+    uint8_t reference = bode_measurement[0];
+    if (reference > 0) {
+        for (uint8_t i = 0; i < 255; i++)
+            bode_measurement[i] = (uint16_t)bode_measurement[i] * 255 / reference;
+    }
+
+    TIMSK1 |= (1 << OCIE1A); // tænd timeren igen
+
+    send_bode_packet(bode_measurement);
+}

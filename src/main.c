@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <util/delay.h>
 #include <spi.h>
+#include "bode.h"
 
 #define BAUD 115200
 #define UBRR_VAL ((F_CPU / 8 / BAUD) - 1) //"reverse" formlen for baudrate
@@ -109,49 +110,7 @@ void main() {
             {
                 shape = 3; //Sinuskurve
                 amplitude = 255; //max
-                SigGen_Update(shape, amplitude, frequency);
-                _delay_ms(50); // giv den lige tid til at indstille det nye signal. 50ms>1 periode selv v 24hz
-                
-                uint8_t bode_measurement[255];
-
-                TIMSK1 &= ~(1 << OCIE1A); // Sluk timer adc samplingen
-
-                for (uint8_t i = 1; ; i++) //wrapper i ved 255??
-                {
-                    SigGen_Update(shape, amplitude, i);
-                    _delay_ms(50);
-
-                    uint8_t max_ampl = 0;
-                    uint8_t min_ampl = 255;
-
-                    for (uint16_t j = 0; j < 500; j++) //tag 500 målinger
-                    {
-                        ADCSRA |= (1 << ADSC); //Start konvertering
-                        while (ADCSRA & (1<<ADSC)); // vent til sample færdigt
-
-                        uint8_t sample = ADCH; 
-                        if (sample > max_ampl){ //tager allerhøjeste - risiko for støj
-                            max_ampl = sample;
-                    }
-                        if (sample < min_ampl){
-                            min_ampl = sample;
-                        }
-                    }
-                            bode_measurement[i - 1] = max_ampl - min_ampl;
-
-                            if (i == 255){
-                                break; // forsøg på at undgå wrap?
-                            }
-                    }
-                    uint8_t reference = bode_measurement[0];
-                    if (reference > 0){ //hvis det ikk har virket
-                        for (uint8_t i = 0; i < 255; i++){
-                            bode_measurement[i] = (uint16_t)bode_measurement[i] * 255 / reference; //gør alle relative til referencen
-                        }
-                    }
-                    TIMSK1 |= (1 << OCIE1A); //tænd timeren igen
-
-                    send_bode_packet(bode_measurement);
+                run_bode_sweep(frequency);
             }
 
             log_add(line);
