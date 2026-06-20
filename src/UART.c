@@ -88,9 +88,106 @@ ISR(USART0_RX_vect) {
         putchUSART0(0x00);
     }
 
-    /*Tilføjet selve uart_send_adc_packet() funktionen der bygger pakken op byte for byte:
-    Sender sync bytes 0x55 0xAA
-    Sender total længde (data + 7 overhead bytes) som to bytes
-    Sender PKT_TYPE_ADC som type
-    Looper igennem databufferen og sender alle samples
-    Sender 0x00 0x00 som CRC placeholder*/
+void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uint8_t frequency)
+{
+    putchUSART0(0x55);
+    putchUSART0(0xAA);       // sync
+    putchUSART0(0x00);
+    putchUSART0(0x0B);       // length = 11
+    putchUSART0(0x01);       // type: GENERATOR
+    putchUSART0(active);
+    putchUSART0(shape);
+    putchUSART0(amplitude);
+    putchUSART0(frequency);
+    putchUSART0(0x00);
+    putchUSART0(0x00);       // CRC (ZERO16)
+}
+
+void send_bode_packet(uint8_t *measurement)
+{
+    putchUSART0(0x55);
+    putchUSART0(0xAA); // sync
+    putchUSART0(0x01);
+    putchUSART0(0x06); // length = 262
+    putchUSART0(0x03); // type: BODE
+    for (uint8_t i = 0; i < 255; i++){
+        putchUSART0(measurement[i]);
+    }
+    putchUSART0(0x00);
+    putchUSART0(0x00); // CRC (ZERO16)
+}
+
+enum
+{
+    S_SYNC1,
+    S_SYNC2,
+    S_LEN_HI,
+    S_LEN_LO,
+    S_TYPE,
+    S_DATA,
+    S_CRC_HI,
+    S_CRC_LO
+};
+
+void UART_data_rx(uint8_t c)
+{
+    static uint8_t state = S_SYNC1;
+    static uint16_t length = 0;    // rå længdefelt fra pakken
+    static uint16_t remaining = 0; // databytes der mangler at blive læst
+    static uint8_t idx = 0;        // skrive-index i pkt_data
+
+
+    switch (state)
+    {
+    case S_SYNC1:
+        if (c == 0x55)
+            state = S_SYNC2;
+        break;
+
+    case S_SYNC2:
+        if (c == 0xAA)
+            state = S_LEN_HI; // sync komplet
+        else if (c == 0x55)
+            state = S_SYNC2; // bliv og vent på 0xAA
+        else
+            state = S_SYNC1; // falsk start, søg igen
+        break;
+
+    case S_LEN_HI:
+        length = ((uint16_t)c) << 8;
+        state = S_LEN_LO;
+        break;
+
+    case S_LEN_LO:
+        length |= c;
+        state = S_TYPE;
+        break;
+
+    case S_TYPE:
+        pkt_type = c;
+        // Antager length = HELE pakkens længde:
+        //   2 sync + 2 len + 1 type + 2 crc = 7 overhead-bytes -> data = length - 7.
+        remaining = (length >= 7) ? (length - 7) : 0;
+        if (remaining > PKT_MAX_DATA)
+            remaining = PKT_MAX_DATA; // klem fast så vi ikke render over bufferen
+        pkt_data_len = (uint8_t)remaining;
+        idx = 0;
+        state = (remaining > 0) ? S_DATA : S_CRC_HI;
+        break;
+
+    case S_DATA:
+        pkt_data[idx++] = c;
+        if (--remaining == 0)
+            state = S_CRC_HI;
+        break;
+
+    case S_CRC_HI:
+        state = S_CRC_LO; // CRC ignoreres lige nu
+        break;
+
+    case S_CRC_LO:
+        ny_pakke_klar = 1; // hel pakke klar til main
+        state = S_SYNC1;   // klar til næste pakke
+        break;
+    }
+}

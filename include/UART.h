@@ -18,7 +18,6 @@ extern volatile uint8_t pkt_type;
 extern volatile uint8_t pkt_data[PKT_MAX_DATA];
 extern volatile uint8_t pkt_data_len;
 extern volatile uint8_t ny_pakke_klar;
-extern volatile uint8_t UART_flag;
 
 void uart0_Init(unsigned int ubrr);
 void putchUSART0(char tx);
@@ -29,7 +28,8 @@ int16_t uart_raw_get(void);   // debug: hent næste rå modtaget byte (-1 = tom)
 // Format: 0x55 0xAA | len_hi len_lo | type | data... | 0x00 0x00 (CRC placeholder)
 void uart_send_adc_packet(volatile uint8_t *data, uint16_t length);
 
-#endif
+void UART_data_rx(uint8_t c);
+void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uint8_t frequency);
+void send_bode_packet(uint8_t *measurement);
 
-/*Tilføjet #define PKT_TYPE_ADC 0x04 som ny pakketype
-Tilføjet declaration af uart_send_adc_packet()*/
+#endif
