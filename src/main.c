@@ -5,9 +5,9 @@
 #include "timer.h"
 #include "I2C.h"
 #include "ssd1306.h"
+#include "display.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <util/delay.h>
 #include <spi.h>
 
@@ -16,99 +16,6 @@
 
 #define SPI_test_mode 0
 
-// ---- OLED layout ----
-#define LINE_W   16     // skærmen er 16 tegn bred
-#define HIST     32     // hvor mange linjer historik vi gemmer (rul-log)
-
-// De øverste LOG_ROWS linjer er rul-log, de sidste 3 er status (S:/SR:/RL:).
-#define LOG_ROWS      5
-#define ROW_STATUS_S  5
-#define ROW_STATUS_SR 6
-#define ROW_STATUS_RL 7
-
-// OLED-skrivning over I2C er langsom — opdater skærmen kun hvert N'te
-// gennemløb af hovedløkken (når der faktisk er noget nyt at vise).
-#define DISPLAY_UPDATE_INTERVAL 20
-
-// Rul-log: én linje pr. modtaget pakke. Når den er fuld, skubber vi op (FIFO).
-static char    history[HIST][LINE_W + 1];
-static uint8_t hist_count = 0;   // antal gyldige linjer (0..HIST)
-
-// Læg en ny linje nederst i loggen. Er loggen fuld, skub alt en op først.
-static void log_add(const char *line)
-{
-    if (hist_count < HIST) {
-        strncpy(history[hist_count], line, LINE_W);
-        history[hist_count][LINE_W] = '\0';
-        hist_count++;
-    } else {
-        for (uint8_t i = 1; i < HIST; i++)
-            memcpy(history[i - 1], history[i], LINE_W + 1);
-        strncpy(history[HIST - 1], line, LINE_W);
-        history[HIST - 1][LINE_W] = '\0';
-    }
-}
-
-// Formatér pakkens databytes som hex ind i out (16 tegn = 8 bytes uden mellemrum).
-// Er der flere end 8 databytes, viser vi kun de første 8 på linjen.
-static void format_hex_line(char *out, const volatile uint8_t *data, uint8_t len)
-{
-    static const char hexd[] = "0123456789ABCDEF";
-    uint8_t n = (len > 8) ? 8 : len;
-    uint8_t p = 0;
-    for (uint8_t i = 0; i < n; i++) {
-        out[p++] = hexd[(data[i] >> 4) & 0x0F];
-        out[p++] = hexd[data[i] & 0x0F];
-    }
-    out[p] = '\0';
-}
-
-// Skriv 'text' på 'row', paddet med mellemrum til fuld bredde så gamle tegn overskrives.
-static void print_padded(uint8_t row, const char *text)
-{
-    char padded[LINE_W + 1];
-    uint8_t i = 0;
-    while (text[i] && i < LINE_W) { padded[i] = text[i]; i++; }
-    while (i < LINE_W) padded[i++] = ' ';
-    padded[LINE_W] = '\0';
-    sendStrXY(padded, row, 0);   // X = række, Y = kolonne (0)
-}
-
-// Tegn et vindue på LOG_ROWS linjer fra historikken, startende ved 'top'.
-static void draw_window(uint8_t top)
-{
-    for (uint8_t row = 0; row < LOG_ROWS; row++) {
-        uint8_t idx = top + row;
-        print_padded(row, (idx < hist_count) ? history[idx] : "");
-    }
-}
-
-// Statuslinjer i bunden af skærmen: sidste SPI-status, samplerate, record length.
-static void update_status_lines(int16_t spi_status)
-{
-    char line[LINE_W + 1];
-
-    if (spi_status >= 0) {
-        sprintf(line, "S:0x%02X", (uint8_t)spi_status);
-        print_padded(ROW_STATUS_S, line);
-    }
-    sprintf(line, "SR:%u", current_sample_rate);
-    print_padded(ROW_STATUS_SR, line);
-    sprintf(line, "RL:%u", record_length);
-    print_padded(ROW_STATUS_RL, line);
-}
-
-uint8_t SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
-{
-    SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
-    uint8_t hs = SPI_Transfer(0xAA);             // sync byte, læs handshake ind på hs
-    SPI_Transfer(shape);
-    SPI_Transfer(ampl);
-    SPI_Transfer(freq);
-    SPI_PORT |= (1 << SPI_SS_PIN); // SS høj — FPGA latcher værdierne her
-
-    return hs;
-}
 
 void main() {
     DDRB |= (1 << PB7); //LED output

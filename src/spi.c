@@ -28,3 +28,15 @@ uint8_t SPI_Transfer(uint8_t data) {
     while(!(SPSR & (1 << SPIF)));
     return SPDR;
 }
+
+uint8_t SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
+{
+    SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
+    uint8_t hs = SPI_Transfer(0xAA);             // sync byte, læs handshake ind på hs
+    SPI_Transfer(shape);
+    SPI_Transfer(ampl);
+    SPI_Transfer(freq);
+    SPI_PORT |= (1 << SPI_SS_PIN); // SS høj — FPGA latcher værdierne her
+
+    return hs;
+}

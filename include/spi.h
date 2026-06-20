@@ -20,4 +20,6 @@ void SPI_Init(SPI_Role role, uint8_t mode); // Initialisere SPI med Rolle (Maste
 
 uint8_t SPI_Transfer(uint8_t data); // Arbejdshesten: Sender én byte og modtager én ny byte hver gang
 
+uint8_t SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq);
+
 #endif
