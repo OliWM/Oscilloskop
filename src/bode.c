@@ -6,7 +6,9 @@
 
 void run_bode_sweep(uint8_t initial_freq)
 {
-    SigGen_Update(3, 255, initial_freq);
+    SigGen_SendParam(SPI_ADDR_SHAPE, 3);      // Sinus til bode sweep
+    SigGen_SendParam(SPI_ADDR_AMPL, 255);     // Fuld amplitude
+    SigGen_SendParam(SPI_ADDR_FREQ, initial_freq);
     _delay_ms(50);
 
     uint8_t bode_measurement[255];
@@ -15,7 +17,7 @@ void run_bode_sweep(uint8_t initial_freq)
 
     for (uint8_t i = 1; ; i++)
     {
-        SigGen_Update(3, 255, i);
+        SigGen_SendParam(SPI_ADDR_FREQ, i);   // Kun frekvens ændres i sweep
         _delay_ms(50);
 
         uint8_t max_ampl = 0;

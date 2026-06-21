@@ -29,14 +29,29 @@ uint8_t SPI_Transfer(uint8_t data) {
     return SPDR;
 }
 
-uint8_t SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq)
+uint8_t SigGen_SendParam(uint8_t address, uint8_t data)
 {
-    SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav — start transaktion
-    uint8_t hs = SPI_Transfer(0xAA);             // sync byte, læs handshake ind på hs
-    SPI_Transfer(shape);
-    SPI_Transfer(ampl);
-    SPI_Transfer(freq);
-    SPI_PORT |= (1 << SPI_SS_PIN); // SS høj — FPGA latcher værdierne her
+    uint8_t checksum = SPI_SYNC ^ address ^ data; // XOR af alle tre bytes = checksum
 
-    return hs;
+    // Sync byte
+    SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav
+    SPI_Transfer(SPI_SYNC);
+    SPI_PORT |= (1 << SPI_SS_PIN);  // SS høj
+
+    // Adresse byte (0x01=shape, 0x02=ampl, 0x03=freq)
+    SPI_PORT &= ~(1 << SPI_SS_PIN);
+    SPI_Transfer(address);
+    SPI_PORT |= (1 << SPI_SS_PIN);
+
+    // Data byte
+    SPI_PORT &= ~(1 << SPI_SS_PIN);
+    SPI_Transfer(data);
+    SPI_PORT |= (1 << SPI_SS_PIN);
+
+    // Send checksum, modtag handshake fra FPGA
+    SPI_PORT &= ~(1 << SPI_SS_PIN);
+    uint8_t handshake = SPI_Transfer(checksum);
+    SPI_PORT |= (1 << SPI_SS_PIN);
+
+    return (handshake == checksum) ? 1 : 0; // 1 = OK, 0 = fejl
 }

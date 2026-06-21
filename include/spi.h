@@ -16,10 +16,15 @@ typedef enum {
     SPI_SLAVE
 } SPI_Role;
 
-void SPI_Init(SPI_Role role, uint8_t mode); // Initialisere SPI med Rolle (Master eller slave) and Mode (0-3, det er mest logisk at have samme mode på både master og slave)
+#define SPI_SYNC      0xAA
+#define SPI_ADDR_SHAPE 0x01
+#define SPI_ADDR_AMPL  0x02
+#define SPI_ADDR_FREQ  0x03
 
-uint8_t SPI_Transfer(uint8_t data); // Arbejdshesten: Sender én byte og modtager én ny byte hver gang
+void SPI_Init(SPI_Role role, uint8_t mode);
 
-uint8_t SigGen_Update(uint8_t shape, uint8_t ampl, uint8_t freq);
+uint8_t SPI_Transfer(uint8_t data);
+
+uint8_t SigGen_SendParam(uint8_t address, uint8_t data);
 
 #endif

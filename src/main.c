@@ -29,16 +29,24 @@ static void handle_button(uint8_t button, uint8_t sw)
 {
     if (button == 1) {            // SELECT (BTN1): skift indstilling 0->1->2->0
         setting = (setting + 1) % 3;
-    } else if (button == 0) {     // ENTER (BTN0): gem SW-værdien i valgt indstilling
-        if (setting == 0)      shape     = sw;
-        else if (setting == 1) amplitude = sw;
-        else                   frequency = sw;
-        last_spi_status = (int16_t)SigGen_Update(shape, amplitude, frequency);
+    } else if (button == 0) {     // ENTER (BTN0): gem SW-værdien og send kun den ændrede parameter
+        if (setting == 0) {
+            shape = sw;
+            last_spi_status = (int16_t)SigGen_SendParam(SPI_ADDR_SHAPE, shape);
+        } else if (setting == 1) {
+            amplitude = sw;
+            last_spi_status = (int16_t)SigGen_SendParam(SPI_ADDR_AMPL, amplitude);
+        } else {
+            frequency = sw;
+            last_spi_status = (int16_t)SigGen_SendParam(SPI_ADDR_FREQ, frequency);
+        }
     }
     else if (button == 3)
     { // RESET (BTN3): nulstil alle parametre
         shape = amplitude = frequency = 0;
-        last_spi_status = (int16_t)SigGen_Update(shape, amplitude, frequency);
+        SigGen_SendParam(SPI_ADDR_SHAPE, 0);
+        SigGen_SendParam(SPI_ADDR_AMPL, 0);
+        last_spi_status = (int16_t)SigGen_SendParam(SPI_ADDR_FREQ, 0);
     }
     else if (button == 2)
     { // RUN (BTN2): toggle measuring-flag
@@ -49,11 +57,14 @@ static void handle_button(uint8_t button, uint8_t sw)
 
 static void handle_spi_test(void)
 {
+    uint8_t addresses[] = {SPI_ADDR_SHAPE, SPI_ADDR_AMPL, SPI_ADDR_FREQ};
     uint16_t hs_count = 0;
     for (uint16_t i = 0; i < 10000; i++)
     {
-        last_spi_status = (int16_t)SigGen_Update(shape, amplitude, frequency);
-        if (last_spi_status == 0x55) hs_count++;
+        uint8_t addr = addresses[i % 3];  // skift mellem adresser
+        uint8_t data = (uint8_t)(i & 0xFF); // variér data for at teste XOR
+        last_spi_status = (int16_t)SigGen_SendParam(addr, data);
+        if (last_spi_status == 1) hs_count++;
     }
     char spi_result1[6];
     char spi_result2[6];
