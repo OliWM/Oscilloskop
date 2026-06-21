@@ -31,7 +31,7 @@ uint8_t SPI_Transfer(uint8_t data) {
 
 uint8_t SigGen_SendParam(uint8_t address, uint8_t data)
 {
-    uint8_t checksum = SPI_SYNC ^ address ^ data; // XOR af alle tre bytes = checksum
+    uint8_t checksum = address ^ data; // XOR = checksum
 
     // Sync byte
     SPI_PORT &= ~(1 << SPI_SS_PIN); // SS lav
