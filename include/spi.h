@@ -16,7 +16,7 @@ typedef enum {
     SPI_SLAVE
 } SPI_Role;
 
-#define SPI_SYNC      0xAA
+#define SPI_SYNC      0xA5
 #define SPI_ADDR_SHAPE 0x01
 #define SPI_ADDR_AMPL  0x02
 #define SPI_ADDR_FREQ  0x03
