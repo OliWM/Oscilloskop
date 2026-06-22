@@ -42,9 +42,10 @@ static uint16_t clamp_record_length(uint16_t rl, uint16_t sr)
         {
             rl = (datapak / (byte_rate - sr)) + 1;
         }
+        rl = rl * 1.1;
     }
 
-    rl = rl * 1.1;
+    
 
     if (rl > MAX_RECORD_LENGTH) return MAX_RECORD_LENGTH;
 
