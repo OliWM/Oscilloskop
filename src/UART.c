@@ -1,19 +1,16 @@
 #include "UART.h"
 #include <avr/interrupt.h>
 
-// ---- Modtaget pakke (fyldes af ISR, læses af main) ----
 volatile uint8_t pkt_type = 0;                 // BTN=0x01, SEND=0x02, START=0x03
 volatile uint8_t pkt_data[PKT_MAX_DATA];       // n databytes
 volatile uint8_t pkt_data_len = 0;             // antal gyldige databytes
 volatile uint8_t ny_pakke_klar = 0;            // flag: main har en hel pakke at læse
 
-// ---- Rå byte-ring (debug): hver eneste modtaget byte gemmes her, uanset format ----
 #define RAW_RING_SZ 128                        // skal være en potens af 2 (maske nedenfor)
 static volatile uint8_t raw_ring[RAW_RING_SZ];
 static volatile uint8_t raw_w = 0;             // skrive-index (kun ISR) (producer)
 static uint8_t          raw_r = 0;             // læse-index (kun main) (consumer)
 
-// Hent næste rå byte fra ringen. Returnerer -1 hvis der ikke er flere.
 int16_t uart_raw_get(void)
 {
     if (raw_r == raw_w) return -1; // tom
@@ -40,15 +37,10 @@ void printString(const char* s) {   // pointer til char array
     while (*s) putchUSART0(*s++); // dereferencer, så længe der "er" noget -> send char og increment array index
 }
 
-// Binær pakke-parser som state-machine. Pakkeformat:
-//   0x55 0xAA | len_hi len_lo | type | data... | crc_hi crc_lo
-// Sync-bytsene (0x55AA) bruges til at "re-frame": går noget galt, finder vi
-// bare den næste 0x55 0xAA og starter forfra. CRC læses men valideres ikke (endnu).
 ISR(USART0_RX_vect) {
     uint8_t c = UDR0;
     PINB |= (1 << PB7); //blink LED ved modtaget data
 
-    // Gem RÅ byte i ringen (debug) FØR vi parser - så vi altid fanger alt.
     if (raw_w != ((raw_r - 1) & (RAW_RING_SZ - 1))){ //tjekker at ringen ikke er fuld (at write har indhentet read med en fuld omgang)
     raw_ring[raw_w] = c;
     raw_w = (raw_w + 1) & (RAW_RING_SZ - 1);
@@ -57,33 +49,23 @@ ISR(USART0_RX_vect) {
 }
 
 
-    // ---------------------------------------------------------------------------
-    // Send ADC-buffer som binær pakke til LabVIEW
-    // Pakkeformat: 0x55 0xAA | len_hi len_lo | type | data... | crc_hi crc_lo
-    // length = total pakkelængde inkl. alle overhead-bytes (7 + databytes)
-    // ---------------------------------------------------------------------------
     void uart_send_adc_packet(volatile uint8_t *data, uint16_t length)
     {
-        uint16_t total_length = length + 7; // 2 sync + 2 len + 1 type + 2 crc
+        uint16_t total_length = length + 7;
 
-        // Sync bytes
         putchUSART0(0x55);
         putchUSART0(0xAA);
 
-        // Length (total pakkelængde)
         putchUSART0((uint8_t)(total_length >> 8));
         putchUSART0((uint8_t)(total_length & 0xFF));
 
-        // Type
         putchUSART0(PKT_TYPE_ADC);
 
-        // Data
         for (uint16_t i = 0; i < length; i++)
         {
             putchUSART0(data[i]);
         }
 
-        // CRC placeholder
         putchUSART0(0x00);
         putchUSART0(0x00);
     }
@@ -91,30 +73,30 @@ ISR(USART0_RX_vect) {
 void send_generator_packet(uint8_t active, uint8_t shape, uint8_t amplitude, uint8_t frequency)
 {
     putchUSART0(0x55);
-    putchUSART0(0xAA);       // sync
+    putchUSART0(0xAA);
     putchUSART0(0x00);
-    putchUSART0(0x0B);       // length = 11
-    putchUSART0(0x01);       // type: GENERATOR
+    putchUSART0(0x0B);
+    putchUSART0(0x01);
     putchUSART0(active);
     putchUSART0(shape);
     putchUSART0(amplitude);
     putchUSART0(frequency);
     putchUSART0(0x00);
-    putchUSART0(0x00);       // CRC (ZERO16)
+    putchUSART0(0x00);
 }
 
 void send_bode_packet(uint8_t *measurement)
 {
     putchUSART0(0x55);
-    putchUSART0(0xAA); // sync
+    putchUSART0(0xAA);
     putchUSART0(0x01);
-    putchUSART0(0x06); // length = 262
-    putchUSART0(0x03); // type: BODE
+    putchUSART0(0x06);
+    putchUSART0(0x03);
     for (uint8_t i = 0; i < 255; i++){
         putchUSART0(measurement[i]);
     }
     putchUSART0(0x00);
-    putchUSART0(0x00); // CRC (ZERO16)
+    putchUSART0(0x00);
 }
 
 enum
@@ -146,11 +128,11 @@ void UART_data_rx(uint8_t c)
 
     case S_SYNC2:
         if (c == 0xAA)
-            state = S_LEN_HI; // sync komplet
+            state = S_LEN_HI;
         else if (c == 0x55)
-            state = S_SYNC2; // bliv og vent på 0xAA
+            state = S_SYNC2;
         else
-            state = S_SYNC1; // falsk start, søg igen
+            state = S_SYNC1;
         break;
 
     case S_LEN_HI:
@@ -165,11 +147,9 @@ void UART_data_rx(uint8_t c)
 
     case S_TYPE:
         pkt_type = c;
-        // Antager length = HELE pakkens længde:
-        //   2 sync + 2 len + 1 type + 2 crc = 7 overhead-bytes -> data = length - 7.
         remaining = (length >= 7) ? (length - 7) : 0;
         if (remaining > PKT_MAX_DATA)
-            remaining = PKT_MAX_DATA; // klem fast så vi ikke render over bufferen
+            remaining = PKT_MAX_DATA;
         pkt_data_len = (uint8_t)remaining;
         idx = 0;
         state = (remaining > 0) ? S_DATA : S_CRC_HI;
@@ -182,12 +162,12 @@ void UART_data_rx(uint8_t c)
         break;
 
     case S_CRC_HI:
-        state = S_CRC_LO; // CRC ignoreres lige nu
+        state = S_CRC_LO;
         break;
 
     case S_CRC_LO:
-        ny_pakke_klar = 1; // hel pakke klar til main
-        state = S_SYNC1;   // klar til næste pakke
+        ny_pakke_klar = 1;
+        state = S_SYNC1;
         break;
     }
 }

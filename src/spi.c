@@ -11,10 +11,6 @@ void SPI_Init(SPI_Role role, uint8_t mode) {
         SPCR = (1 << SPE);  // Enable SPI, Slave
     }
 
-    // Set SPI Mode (CPOL and CPHA)
-    // Mode 0: CPOL=0, CPHA=0 | Mode 1: CPOL=0, CPHA=1
-    // Mode 2: CPOL=1, CPHA=0 | Mode 3: CPOL=1, CPHA=1
-
     switch(mode) {
         case 1: SPCR |= (1 << CPHA); break;
         case 2: SPCR |= (1 << CPOL); break;

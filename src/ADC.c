@@ -3,7 +3,6 @@
 #include "ADC.h"
 #include "timer.h"
 
-// Double buffers
 volatile uint8_t buffer_A[MAX_RECORD_LENGTH];
 volatile uint8_t buffer_B[MAX_RECORD_LENGTH];
 volatile uint8_t *active_buffer  = buffer_A;
@@ -17,9 +16,6 @@ volatile uint8_t  bode_mode         = 0;
 volatile uint8_t  bode_sample       = 0;
 volatile uint8_t  bode_sample_ready = 0;
 
-// Klem værdier modtaget fra UART ind i sikre grænser, FØR de bruges.
-// record_length styrer hvornår ADC_vect skifter buffer — en uklemt værdi
-// over MAX_RECORD_LENGTH får ISR'en til at skrive uden for buffer_A/buffer_B.
 static uint16_t clamp_sample_rate(uint16_t sr)
 {
     if (sr < 10) return 10;
@@ -56,9 +52,6 @@ static uint16_t clamp_record_length(uint16_t rl, uint16_t sr)
     return rl;
 }
 
-// ---------------------------------------------------------------------------
-// ADC Complete ISR — læs sample, håndter buffer-skift
-// ---------------------------------------------------------------------------
 ISR(ADC_vect)
 {
     if (bode_mode) {
@@ -82,9 +75,6 @@ ISR(ADC_vect)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Initialisering
-// ---------------------------------------------------------------------------
 void adc_init(uint16_t sample_rate, uint16_t rec_length)
 {
     sample_rate = clamp_sample_rate(sample_rate);
@@ -93,27 +83,18 @@ void adc_init(uint16_t sample_rate, uint16_t rec_length)
     current_sample_rate = sample_rate;
     record_length = rec_length;
 
-    // REFS1:0 = 00 → ekstern AREF
-    // ADLAR   = 1  → venstrejustering (læs 8-bit fra ADCH)
-    // MUX     = 0  → ADC0 (juster pin efter behov)
+    // ekstern AREF, venstrejustering (8-bit fra ADCH), ADC0
     ADMUX = (0 << REFS1) | (0 << REFS0) | (1 << ADLAR) | (0 << MUX0);
 
-    // Prescaler 16 → ADC clock = 16 MHz / 16 = 1 MHz (~76.900 SPS max)
-    // Over 200 kHz mister ADC'en 10-bit nøjagtighed, men vi bruger kun
-    // de øverste 8 bit (ADLAR=1 → ADCH), så det er acceptabelt.
-    // ADEN  = ADC enable
-    // ADIE  = ADC interrupt enable
+    // prescaler 16, ADC enable, ADC interrupt enable
     ADCSRA = (1 << ADEN) | (1 << ADIE)
-           | (1 << ADPS2) | (0 << ADPS1) | (0 << ADPS0); // prescaler 16
+           | (1 << ADPS2) | (0 << ADPS1) | (0 << ADPS0);
 
     timer_init(sample_rate);
 
     sei();
 }
 
-// ---------------------------------------------------------------------------
-// Opdater parametre under kørsel (kaldes fra UART RX handler)
-// ---------------------------------------------------------------------------
 void adc_set_params(uint16_t sample_rate, uint16_t rec_length)
 {
     sample_rate = clamp_sample_rate(sample_rate);

@@ -1,11 +1,6 @@
 #ifndef DATA_H_
 #define DATA_H_
 
-/*
- * This file declares font/bitmap data stored in PROGMEM.
- * Definitions live in src/data.c so we only have one copy.
- */
-
 #include <stdint.h>
 #include <avr/pgmspace.h>
 
