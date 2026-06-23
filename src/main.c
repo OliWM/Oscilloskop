@@ -118,8 +118,8 @@ int main(void) {
                 adc_set_params(sample_rate, rec_length);
             }
             else if (type == PKT_TYPE_START) {
-                shape = 3;
-                amplitude = 255;
+                shape = 3; //sinus
+                amplitude = 255; //max
                 run_bode_sweep(frequency);
             }
 

@@ -1,6 +1,7 @@
 #include "bode.h"
 #include "spi.h"
 #include "UART.h"
+#include "ADC.h"
 #include <avr/io.h>
 #include <util/delay.h>
 
@@ -23,17 +24,23 @@ void run_bode_sweep(uint8_t initial_freq)
         uint8_t max_ampl = 0;
         uint8_t min_ampl = 255;
 
+        bode_mode = 1;
+        bode_sample_ready = 0;
+        ADCSRA |= (1 << ADSC);
+
         for (uint16_t j = 0; j < 500; j++)
         {
-            ADCSRA |= (1 << ADSC);
-            while (ADCSRA & (1 << ADSC));
+            while (!bode_sample_ready);
+            bode_sample_ready = 0;
+            uint8_t sample = bode_sample;
 
-            uint8_t sample = ADCH;
             if (sample > max_ampl)
                 max_ampl = sample;
             if (sample < min_ampl)
                 min_ampl = sample;
         }
+
+        bode_mode = 0;
         bode_measurement[i - 1] = max_ampl - min_ampl;
 
         if (i == 255)

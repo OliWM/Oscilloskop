@@ -16,6 +16,10 @@ extern volatile uint16_t buffer_index;
 extern volatile uint16_t record_length;    // Antal samples per pakke (10–1000)
 extern volatile uint16_t current_sample_rate; // Aktuel samplerate i SPS (10–10000)
 
+extern volatile uint8_t  bode_mode;
+extern volatile uint8_t  bode_sample;
+extern volatile uint8_t  bode_sample_ready;
+
 // Initialiserer ADC og Timer1
 // sample_rate: ønsket samplerate i SPS (10–10000)
 // rec_length:  antal samples per pakke (10–1000)

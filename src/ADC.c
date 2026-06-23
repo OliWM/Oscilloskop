@@ -13,6 +13,10 @@ volatile uint16_t buffer_index   = 0;
 volatile uint16_t record_length  = MAX_RECORD_LENGTH;
 volatile uint16_t current_sample_rate = 0;
 
+volatile uint8_t  bode_mode         = 0;
+volatile uint8_t  bode_sample       = 0;
+volatile uint8_t  bode_sample_ready = 0;
+
 // Klem værdier modtaget fra UART ind i sikre grænser, FØR de bruges.
 // record_length styrer hvornår ADC_vect skifter buffer — en uklemt værdi
 // over MAX_RECORD_LENGTH får ISR'en til at skrive uden for buffer_A/buffer_B.
@@ -57,21 +61,24 @@ static uint16_t clamp_record_length(uint16_t rl, uint16_t sr)
 // ---------------------------------------------------------------------------
 ISR(ADC_vect)
 {
-    // ADLAR=1: ADCH indeholder de 8 MSB (vores 8-bit sample)
+    if (bode_mode) {
+        bode_sample = ADCH;
+        ADCSRA |= (1 << ADSC);
+        bode_sample_ready = 1;
+        return;
+    }
+
     active_buffer[buffer_index++] = ADCH;
 
     if (buffer_index >= record_length) {
         buffer_index = 0;
 
         if (!buffer_ready) {
-            // Skift buffer (dobbelt-buffering)
             volatile uint8_t *tmp = active_buffer;
             active_buffer         = ready_buffer;
             ready_buffer          = tmp;
-            buffer_ready          = 1;   // Signalér main loop
+            buffer_ready          = 1;
         }
-        // Hvis buffer_ready stadig er sat er forrige pakke ikke sendt endnu —
-        // vi overwriter active_buffer (sample-drop, men ingen korruption)
     }
 }
 
