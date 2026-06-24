@@ -47,6 +47,7 @@ static uint16_t clamp_record_length(uint16_t rl, uint16_t sr)
 
     
 
+    if (rl < 10) rl = 10;
     if (rl > MAX_RECORD_LENGTH) return MAX_RECORD_LENGTH;
 
     return rl;
